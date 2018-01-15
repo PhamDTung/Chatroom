@@ -4,12 +4,13 @@
  */
 
 var express = require('express');
-var routes = require('./routes');
+// var routes = require('./routes');
 // var user = require('./routes/user');
 var favicon = require('serve-favicon');
 var morgan = require('morgan');
 var http = require('http');
 var path = require('path');
+var bodyParser = require('body-parser');
 
 var app = express();
 
@@ -23,20 +24,67 @@ app.use(express.json());
 app.use(express.urlencoded());
 app.use(express.methodOverride());
 app.use(app.router);
+app.use(bodyParser.urlencoded({extened:true}));
 app.use(require('stylus').middleware(path.join(__dirname, 'public')));
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(morgan('combined'));
 // development only
 if ('development' == app.get('env')) {
-  app.use(express.errorHandler());
+    app.use(express.errorHandler());
 }
 // gzip/deflate outgoing responses
 
 
 
-app.get('/', routes.index);
+// app.get('/', routes.index);
 // app.get('/users', user.list);
-
-http.createServer(app).listen(app.get('port'), function(){
-  console.log('Express server listening on port ' + app.get('port'));
+app.get('/', function(req, res){
+    res.render("index");
 });
+
+var serve = http.createServer(app);
+var io = require('socket.io')(serve);
+
+serve.listen(app.get('port'), function () {
+    console.log('Express server listening on port ' + app.get('port'));
+});
+
+io.on('connection', function (socket) {
+    console.log('a user connected');
+    socket.on('disconnect', function () {
+        console.log('user disconnected');
+    });
+    socket.on('chat', function (msg) {
+        socket.broadcast.emit('chat', msg);
+    });
+});
+
+var MongoClient = require('mongodb').MongoClient;
+Server = require('mongodb').Server;
+
+// Set up the connection to the local db
+// var mongoclient = new MongoClient(new Server("localhost", 27017), { native_parser: true });
+
+// Open the connection to the server
+var url = 'mongodb://localhost:27017/Chatroom';
+MongoClient.connect(url, function (err, db) {
+    if(!err) {
+        console.log("We are connected");
+    } else console.log("Connect fail");
+    var collection = db.collection('chat messages');
+    io.on('connection', function (socket) {
+        console.log('a user connected');
+        socket.on('disconnect', function () {
+            console.log('user disconnected');
+        });
+        socket.on('chat', function (msg) {
+            socket.broadcast.emit('chat', msg);
+            collection.insert({ content: msg }, function(err, o) {
+                if (err) { console.warn(err.message); }
+                else { console.log("chat message inserted into db: " + msg); }
+            });
+        });
+        
+    });
+});
+
